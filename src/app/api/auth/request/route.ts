@@ -1,4 +1,5 @@
-import { adminEmails, authEnabled, createServiceClient, createUserClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { adminEmails, authEnabled, createServiceClient } from "@/lib/supabase/server";
 
 // Step 1 of sign-in: just the email. A sign-in link is sent only when the email is
 // registered to a supplier or is an AP admin; the supplier comes from that registration.
@@ -17,17 +18,22 @@ export async function POST(request: Request) {
   }
 
   if (allowed) {
-    const supabase = await createUserClient();
+    // "Implicit" flow: the emailed link carries the session itself, so it works in any
+    // browser or email app. (The default flow needs a cookie from the browser that asked,
+    // and breaks if the link is opened elsewhere or a second link was requested.)
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false },
+    });
     const origin = new URL(request.url).origin;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true, emailRedirectTo: `${origin}/auth/callback` },
+      options: { shouldCreateUser: true, emailRedirectTo: `${origin}/auth/confirm` },
     });
     if (error) console.error("signInWithOtp failed", error.message);
   }
   return Response.json({
     ok: true,
     message:
-      "If that email is registered, we've sent it a sign-in link. Open it in this browser. If the email has a code instead, enter it below.",
+      "If that email is registered, we've sent it a sign-in link. Click it to sign in. If the email has a code instead, enter it below.",
   });
 }
