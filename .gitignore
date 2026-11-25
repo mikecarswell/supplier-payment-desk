@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# eval runs: keep only latest-<config>.json in git
+evals/results/*
+!evals/results/latest-*.json

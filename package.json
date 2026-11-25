@@ -1,17 +1,22 @@
 {
-  "name": "app-tmp",
+  "name": "supplier-inquiry-agent",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx evals/guards.test.mts",
+    "eval": "tsx evals/run.mts",
+    "scorecard": "tsx evals/scorecard.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
     "next": "16.4.6",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
@@ -21,6 +26,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
