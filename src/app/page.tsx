@@ -40,6 +40,7 @@ interface ChatLine {
 
 export default function Home() {
   const [sender, setSender] = useState(PERSONAS[0].email);
+  const [config, setConfig] = useState<"v2" | "v1">("v2");
   const [history, setHistory] = useState<Anthropic.Beta.BetaMessageParam[]>([]);
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [input, setInput] = useState("");
@@ -97,7 +98,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history, message, senderEmail: sender }),
+        body: JSON.stringify({ history, message, senderEmail: sender, config }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Request failed");
@@ -128,7 +129,7 @@ export default function Home() {
         </Link>
       </header>
 
-      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
         {me?.authEnabled ? (
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Signed in as</span>
@@ -170,6 +171,20 @@ export default function Home() {
             </select>
           </label>
         )}
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Agent version</span>
+          <select
+            className="rounded border border-slate-300 bg-white px-2 py-1.5"
+            value={config}
+            onChange={(e) => {
+              setConfig(e.target.value as "v1" | "v2");
+              reset();
+            }}
+          >
+            <option value="v2">v2: policy + guards</option>
+            <option value="v1">v1: baseline</option>
+          </select>
+        </label>
         <button onClick={reset} className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
           New conversation
         </button>

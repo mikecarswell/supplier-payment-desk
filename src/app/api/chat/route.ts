@@ -13,11 +13,8 @@ interface ChatRequest {
   history: Anthropic.Beta.BetaMessageParam[];
   message: string;
   senderEmail: string;
+  config: keyof typeof CONFIGS;
 }
-
-// The live app always runs the policy prompt with code guards. The v1 baseline
-// exists only for the eval runner, never behind this API.
-const LIVE_CONFIG = CONFIGS.v2;
 
 export async function POST(request: Request) {
   let body: ChatRequest;
@@ -26,7 +23,7 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { history = [], message, senderEmail } = body;
+  const { history = [], message, senderEmail, config = "v2" } = body;
 
   if (typeof message !== "string" || !message.trim() || message.length > MAX_MESSAGE_CHARS)
     return Response.json({ error: `Message must be 1 to ${MAX_MESSAGE_CHARS} characters.` }, { status: 400 });
@@ -34,6 +31,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "A sender email is required." }, { status: 400 });
   if (!Array.isArray(history) || history.length > MAX_HISTORY)
     return Response.json({ error: "Conversation is too long. Start a new one." }, { status: 400 });
+  if (!(config in CONFIGS)) return Response.json({ error: "Unknown config" }, { status: 400 });
 
   try {
     let sender = senderEmail;
@@ -44,9 +42,9 @@ export async function POST(request: Request) {
       const { data } = await userClient.auth.getUser();
       if (!data.user?.email) return Response.json({ error: "Please sign in." }, { status: 401 });
       sender = data.user.email.toLowerCase();
-      repo = new SupabaseRepo(userClient, createServiceClient(), LIVE_CONFIG.enforceGuards);
+      repo = new SupabaseRepo(userClient, createServiceClient(), CONFIGS[config].enforceGuards);
     }
-    const result = await runTurn({ history, userMessage: message.trim(), senderEmail: sender, config: LIVE_CONFIG, repo });
+    const result = await runTurn({ history, userMessage: message.trim(), senderEmail: sender, config: CONFIGS[config], repo });
     return Response.json(result);
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError)

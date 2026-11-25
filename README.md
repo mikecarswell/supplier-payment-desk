@@ -51,7 +51,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 npm run dev
 ```
 
-Open http://localhost:3000. Sign in with a demo account (including the impostors) and expand "Agent trace" to see every tool call. The live app always runs v2; v1 exists only for the evals.
+Open http://localhost:3000. Pick a persona (including the impostors), switch between v1 and v2, and expand "Agent trace" to see every tool call.
 
 ## Evals
 
