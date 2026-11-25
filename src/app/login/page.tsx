@@ -7,7 +7,6 @@ import { DEMO_ACCOUNTS } from "@/lib/demo-accounts";
 export default function LoginPage() {
   const router = useRouter();
   const [step, setStep] = useState<"details" | "code">("details");
-  const [companyId, setCompanyId] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,17 +59,13 @@ export default function LoginPage() {
             className="space-y-3"
             onSubmit={async (e) => {
               e.preventDefault();
-              const d = await post("/api/auth/request", { companyId, email });
+              const d = await post("/api/auth/request", { email });
               if (d) {
                 setNote(d.message);
                 setStep("code");
               }
             }}
           >
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Supplier ID</span>
-              <input className={input} placeholder="e.g. SUP-1001" value={companyId} onChange={(e) => setCompanyId(e.target.value)} required />
-            </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Work email</span>
               <input className={input} type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} required />

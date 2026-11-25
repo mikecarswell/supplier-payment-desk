@@ -40,9 +40,6 @@ export const adminEmails = () =>
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
-// Company ID AP admins enter on the sign-in form.
-export const ADMIN_COMPANY_ID = "MERIDIAN";
-
 export interface SessionInfo {
   email: string;
   company: { id: string; name: string } | null;

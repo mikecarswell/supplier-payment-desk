@@ -91,7 +91,7 @@ The three configs give the before-and-after story: **v1** (naive prompt, no guar
 
 With Supabase configured, suppliers sign in and the persona picker goes away:
 
-- **Sign-in:** supplier ID + work email. A 6-digit code is emailed only if that email is registered to that supplier. The response is the same either way, so the form doesn't reveal who is registered.
+- **Sign-in:** work email only. A sign-in link is emailed only if that email is registered to a supplier (or is an AP admin), and the supplier comes from that registration. The response is the same either way, so the form doesn't reveal who is registered.
 - **Many users per supplier:** `company_users` maps each email to one supplier. AP admins add and remove people at `/admin`.
 - **Database-enforced isolation:** row level security returns only the signed-in user's company rows. Full bank numbers, phone numbers, fraud flags and internal notes sit in `*_private` tables only the server can read.
 - **Demo accounts:** buttons on the sign-in page sign in as the fictional suppliers (or two unregistered impostors) without email. Turn off with `DEMO_SIGNIN=off`.
@@ -100,7 +100,7 @@ With Supabase configured, suppliers sign in and the persona picker goes away:
 Setup:
 
 1. Create a Supabase project. Add to `.env.local` (and to Vercel's environment variables):
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `ADMIN_EMAILS` (comma-separated AP admin emails; admins sign in with supplier ID `MERIDIAN`).
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `ADMIN_EMAILS` (comma-separated AP admin emails).
 2. `npm run db:setup` creates the tables, security rules and demo data. It drops and recreates the app tables.
 3. In Supabase, **Authentication > URL Configuration**: set Site URL to your deployed URL and add `https://<your-app>/**` and `http://localhost:3000/**` as redirect URLs. The default email contains a sign-in link that lands on `/auth/callback`.
 4. Supabase's built-in email only delivers to your project's team members, and its templates can't be edited. For real suppliers, add your own SMTP under **Authentication > Emails > SMTP Settings**; then you can also add `{{ .Token }}` to the Magic Link and Confirm signup templates to send 6-digit codes, which the sign-in page also accepts.
