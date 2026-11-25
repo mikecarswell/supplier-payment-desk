@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { PROMPTS, type PromptVersion } from "./prompts";
-import { executeTool, toolDefinitions, type AgentAction } from "./tools";
+import { executeTool, toolDefinitions, type AgentAction, type ToolContext } from "./tools";
+import { MemoryRepo, type ApRepo } from "./repo";
 
 export const MODEL = "claude-opus-5-5";
 const MAX_TOOL_ROUNDS = 8;
@@ -39,12 +40,18 @@ export async function runTurn(opts: {
   userMessage: string;
   senderEmail: string;
   config: AgentConfig;
+  repo?: ApRepo; // defaults to the in-memory mock data
 }): Promise<TurnResult> {
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     ...opts.history,
     { role: "user", content: opts.userMessage },
   ];
-  const ctx = { senderEmail: opts.senderEmail, enforceGuards: opts.config.enforceGuards, actions: [] as AgentAction[] };
+  const ctx: ToolContext = {
+    senderEmail: opts.senderEmail,
+    enforceGuards: opts.config.enforceGuards,
+    actions: [],
+    repo: opts.repo ?? new MemoryRepo(),
+  };
   const tools: ToolTrace[] = [];
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
@@ -81,13 +88,15 @@ export async function runTurn(opts: {
       return finish(textOf(response.content));
     }
 
-    const results: Anthropic.Beta.BetaToolResultBlockParam[] = toolUses.map((t) => {
+    // Run sequentially so recorded actions keep the model's order.
+    const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
+    for (const t of toolUses) {
       const input = (t.input ?? {}) as Record<string, string>;
-      const output = executeTool(t.name, input, ctx);
+      const output = await executeTool(t.name, input, ctx);
       tools.push({ name: t.name, input, output });
       const isError = typeof output === "object" && output !== null && "error" in output;
-      return { type: "tool_result", tool_use_id: t.id, content: JSON.stringify(output), is_error: isError };
-    });
+      results.push({ type: "tool_result", tool_use_id: t.id, content: JSON.stringify(output), is_error: isError });
+    }
     // All results for one assistant turn go back in a single user message.
     messages.push({ role: "user", content: results });
   }

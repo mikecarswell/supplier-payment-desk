@@ -87,6 +87,24 @@ npm run scorecard
 
 The three configs give the before-and-after story: **v1** (naive prompt, no guards), **v2-prompt-only** (what prompting alone buys you), **v2** (prompt plus code guards).
 
+## Sign-in and multiple users (Supabase)
+
+With Supabase configured, suppliers sign in and the persona picker goes away:
+
+- **Sign-in:** supplier ID + work email. A 6-digit code is emailed only if that email is registered to that supplier. The response is the same either way, so the form doesn't reveal who is registered.
+- **Many users per supplier:** `company_users` maps each email to one supplier. AP admins add and remove people at `/admin`.
+- **Database-enforced isolation:** row level security returns only the signed-in user's company rows. Full bank numbers, phone numbers, fraud flags and internal notes sit in `*_private` tables only the server can read.
+- **Demo accounts:** buttons on the sign-in page sign in as the fictional suppliers (or two unregistered impostors) without email. Turn off with `DEMO_SIGNIN=off`.
+- **Without Supabase** (no env vars), the app runs in the original demo mode on in-memory data. Evals always use in-memory data.
+
+Setup:
+
+1. Create a Supabase project. Add to `.env.local` (and to Vercel's environment variables):
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `ADMIN_EMAILS` (comma-separated AP admin emails; admins sign in with supplier ID `MERIDIAN`).
+2. `npm run db:setup` creates the tables, security rules and demo data. It drops and recreates the app tables.
+3. In Supabase, **Authentication > Email Templates > Magic Link**: add `{{ .Token }}` to the email body so it contains the 6-digit code.
+4. Supabase's built-in email only delivers to your project's team members. For real suppliers, add your own SMTP under **Authentication > SMTP Settings**.
+
 ## Deploy (Vercel)
 
 1. Push this repo to GitHub.

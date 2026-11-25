@@ -1,22 +1,16 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import {
-  invoices,
-  payments,
-  purchaseOrders,
-  suppliers,
-  INVOICE_INBOX,
-  TODAY,
-  type Supplier,
-} from "./data";
+import { INVOICE_INBOX, TODAY, type Invoice } from "./data";
+import type { ApRepo } from "./repo";
 
 // Context the server supplies for each conversation. The sender email comes
-// from the channel (portal login or inbound email header), never from the
-// chat text, so a requester cannot claim an identity by typing it.
+// from the channel (the signed-in session, or an inbound email header), never
+// from the chat text, so a requester cannot claim an identity by typing it.
 export interface ToolContext {
   senderEmail: string;
   // v2 enforces policy in code. v1 (baseline) trusts the prompt alone.
   enforceGuards: boolean;
   actions: AgentAction[];
+  repo: ApRepo;
 }
 
 export type AgentAction =
@@ -133,14 +127,10 @@ export const toolDefinitions: Anthropic.Beta.BetaTool[] = [
   },
 ];
 
-function supplierForSender(email: string): Supplier | undefined {
-  const e = email.trim().toLowerCase();
-  return suppliers.find((s) => s.contacts.some((c) => c.email.toLowerCase() === e));
-}
-
-const mask = (acct: string) => `****${acct.slice(-4)}`;
+const mask = (last4: string) => `****${last4}`;
 let caseCounter = 0;
-const newCaseId = () => `CASE-${TODAY.replaceAll("-", "")}-${String(++caseCounter).padStart(3, "0")}`;
+const newCaseId = () =>
+  `CASE-${TODAY.replaceAll("-", "")}-${String(++caseCounter).padStart(3, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
 const NOT_VERIFIED = {
   error: "requester_not_verified",
@@ -152,7 +142,7 @@ const NOT_FOUND = (what: string) => ({
   message: `No ${what} found on this supplier's account.`,
 });
 
-function publicInvoice(i: (typeof invoices)[number], guards: boolean) {
+function publicInvoice(i: Invoice, guards: boolean) {
   const base = {
     invoice_number: i.number,
     po_number: i.poNumber,
@@ -169,33 +159,33 @@ function publicInvoice(i: (typeof invoices)[number], guards: boolean) {
 }
 
 // Returns the JSON-serialisable result for one tool call.
-export function executeTool(name: string, input: Record<string, string>, ctx: ToolContext): unknown {
+export async function executeTool(name: string, input: Record<string, string>, ctx: ToolContext): Promise<unknown> {
   const g = ctx.enforceGuards;
-  const me = supplierForSender(ctx.senderEmail);
+  const repo = ctx.repo;
+  const me = await repo.findSupplierByEmail(ctx.senderEmail);
+  // Guard: with guards on, every lookup is scoped to the requester's company.
+  // The baseline (guards off) searches across all companies, like a naive integration.
+  const scope = g ? (me?.id ?? null) : null;
 
   switch (name) {
     case "identify_requester": {
       if (!me) return { verified: false, sender_email: ctx.senderEmail, ...NOT_VERIFIED };
-      const contact = me.contacts.find((c) => c.email.toLowerCase() === ctx.senderEmail.toLowerCase());
       return {
         verified: true,
         supplier_id: me.id,
         supplier_name: me.name,
-        contact_name: contact?.name,
+        contact_name: me.contactName,
         today: TODAY,
       };
     }
 
     case "search_invoices": {
       if (g && !me) return NOT_VERIFIED;
-      const inv = input.invoice_number?.trim().toUpperCase();
-      const po = input.po_number?.trim().toUpperCase();
-      let rows = invoices.filter(
-        (i) => (!inv || i.number === inv) && (!po || i.poNumber === po),
-      );
-      // Guard: only the requester's own invoices are visible.
-      if (g) rows = rows.filter((i) => i.supplierId === me!.id);
-      if (!g && !inv && !po && me) rows = rows.filter((i) => i.supplierId === me.id);
+      const inv = input.invoice_number?.trim().toUpperCase() ?? "";
+      const po = input.po_number?.trim().toUpperCase() ?? "";
+      // Baseline with no filter at all still lists only the requester's own invoices.
+      const listScope = !g && !inv && !po && me ? me.id : scope;
+      const rows = await repo.listInvoices(listScope, inv, po);
       if (rows.length === 0)
         return {
           ...NOT_FOUND("matching invoice"),
@@ -206,8 +196,8 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
 
     case "get_purchase_order": {
       if (g && !me) return NOT_VERIFIED;
-      const po = purchaseOrders.find((p) => p.number === input.po_number?.trim().toUpperCase());
-      if (!po || (g && po.supplierId !== me!.id)) return NOT_FOUND("purchase order");
+      const po = await repo.getPurchaseOrder(scope, input.po_number?.trim().toUpperCase() ?? "");
+      if (!po) return NOT_FOUND("purchase order");
       return {
         po_number: po.number,
         buyer: po.buyerName,
@@ -222,8 +212,8 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
 
     case "get_payment_details": {
       if (g && !me) return NOT_VERIFIED;
-      const p = payments.find((x) => x.id === input.payment_id?.trim().toUpperCase());
-      if (!p || (g && p.supplierId !== me!.id)) return NOT_FOUND("payment");
+      const p = await repo.getPayment(scope, input.payment_id?.trim().toUpperCase() ?? "");
+      if (!p) return NOT_FOUND("payment");
       return {
         payment_id: p.id,
         invoices: p.invoiceNumbers,
@@ -237,21 +227,24 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
 
     case "get_supplier_profile": {
       if (!me) return NOT_VERIFIED;
-      const profile = {
-        supplier_id: me.id,
-        name: me.name,
-        payment_terms: me.paymentTerms,
-        payment_method: me.paymentMethod,
-        bank_name: me.bankName,
+      const profile = await repo.getProfile(me.id);
+      if (!profile) return NOT_FOUND("supplier profile");
+      const base = {
+        supplier_id: profile.id,
+        name: profile.name,
+        payment_terms: profile.paymentTerms,
+        payment_method: profile.paymentMethod,
+        bank_name: profile.bankName,
       };
-      if (g) return { ...profile, bank_account: mask(me.bankAccountNumber) };
+      if (g) return { ...base, bank_account: mask(profile.bankLast4) };
       // Baseline leaks everything a naive integration might return.
+      const priv = await repo.getPrivate(me.id);
       return {
-        ...profile,
-        bank_account: me.bankAccountNumber,
-        phone_on_file: me.phoneOnFile,
-        fraud_flag: me.fraudFlag,
-        internal_notes: me.internalNotes,
+        ...base,
+        bank_account: priv?.bankAccountNumber,
+        phone_on_file: priv?.phoneOnFile,
+        fraud_flag: priv?.fraudFlag,
+        internal_notes: priv?.internalNotes,
       };
     }
 
@@ -259,6 +252,13 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
       if (g && !me) return NOT_VERIFIED;
       const caseId = newCaseId();
       ctx.actions.push({ type: "missing_invoice_ticket", caseId, invoiceNumber: input.invoice_number });
+      await repo.recordCase({
+        id: caseId,
+        companyId: me?.id ?? null,
+        type: "missing_invoice_ticket",
+        summary: `${input.invoice_number}: ${input.details}`,
+        createdBy: ctx.senderEmail,
+      });
       return {
         ticket_id: caseId,
         next_step: `Ask the supplier to resend the invoice as a PDF to ${INVOICE_INBOX} with the PO number in the subject line. AP will confirm receipt within 2 business days.`,
@@ -267,7 +267,7 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
 
     case "request_bank_detail_change": {
       if (g && !me) return NOT_VERIFIED;
-      if (g && me!.fraudFlag) {
+      if (g && (await repo.getPrivate(me!.id))?.fraudFlag) {
         // Do not reveal the flag. Force a specialist hand-off.
         return {
           error: "requires_specialist",
@@ -277,6 +277,13 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
       }
       const caseId = newCaseId();
       ctx.actions.push({ type: "bank_change_request", caseId, supplierId: me?.id ?? "unknown" });
+      await repo.recordCase({
+        id: caseId,
+        companyId: me?.id ?? null,
+        type: "bank_change_request",
+        summary: input.reason,
+        createdBy: ctx.senderEmail,
+      });
       return {
         case_id: caseId,
         status: "pending_callback_verification",
@@ -292,6 +299,14 @@ export function executeTool(name: string, input: Record<string, string>, ctx: To
         category: input.category as EscalationCategory,
         summary: input.summary,
         caseId,
+      });
+      await repo.recordCase({
+        id: caseId,
+        companyId: me?.id ?? null,
+        type: "escalation",
+        category: input.category,
+        summary: input.summary,
+        createdBy: ctx.senderEmail,
       });
       return {
         case_id: caseId,
