@@ -179,6 +179,47 @@ export default function Home() {
   );
 }
 
+// Renders the small markdown subset the agent uses: paragraphs, **bold**,
+// and "- " / "1. " lists. Text is rendered as React nodes, never raw HTML.
+function SimpleMarkdown({ text }: { text: string }) {
+  const bold = (s: string) =>
+    s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+      part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
+    );
+
+  const blocks: React.ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  const flush = () => {
+    if (!list) return;
+    const items = list.items.map((it, i) => <li key={i}>{bold(it)}</li>);
+    blocks.push(
+      list.ordered ? (
+        <ol key={blocks.length} className="list-decimal space-y-0.5 pl-5">{items}</ol>
+      ) : (
+        <ul key={blocks.length} className="list-disc space-y-0.5 pl-5">{items}</ul>
+      ),
+    );
+    list = null;
+  };
+
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    const ul = line.match(/^[-*•]\s+(.*)$/);
+    const ol = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ul || ol) {
+      const ordered = Boolean(ol);
+      if (list && list.ordered !== ordered) flush();
+      list ??= { ordered, items: [] };
+      list.items.push((ul ?? ol)![1]);
+    } else {
+      flush();
+      if (line) blocks.push(<p key={blocks.length}>{bold(line.replace(/^#+\s*/, ""))}</p>);
+    }
+  }
+  flush();
+  return <div className="space-y-2">{blocks}</div>;
+}
+
 function Message({ line }: { line: ChatLine }) {
   if (line.role === "error")
     return <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">Error: {line.text}</p>;
@@ -186,11 +227,11 @@ function Message({ line }: { line: ChatLine }) {
   return (
     <div className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
-          mine ? "bg-indigo-700 text-white" : "bg-slate-100"
+        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+          mine ? "whitespace-pre-wrap bg-indigo-700 text-white" : "bg-slate-100"
         }`}
       >
-        {line.text}
+        {mine ? line.text : <SimpleMarkdown text={line.text} />}
       </div>
       {line.actions?.map((a) => (
         <span key={a.caseId} className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
