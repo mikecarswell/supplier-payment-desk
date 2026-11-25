@@ -26,11 +26,16 @@ export async function POST(request: Request) {
 
   if (allowed) {
     const supabase = await createUserClient();
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    const origin = new URL(request.url).origin;
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true, emailRedirectTo: `${origin}/auth/callback` },
+    });
     if (error) console.error("signInWithOtp failed", error.message);
   }
   return Response.json({
     ok: true,
-    message: "If that email is registered to that company, we've sent it a 6-digit code.",
+    message:
+      "If that email is registered to that company, we've emailed it a sign-in link. Open it in this browser. If the email has a code instead, enter it below.",
   });
 }

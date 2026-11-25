@@ -102,8 +102,8 @@ Setup:
 1. Create a Supabase project. Add to `.env.local` (and to Vercel's environment variables):
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `ADMIN_EMAILS` (comma-separated AP admin emails; admins sign in with supplier ID `MERIDIAN`).
 2. `npm run db:setup` creates the tables, security rules and demo data. It drops and recreates the app tables.
-3. In Supabase, **Authentication > Email Templates > Magic Link**: add `{{ .Token }}` to the email body so it contains the 6-digit code.
-4. Supabase's built-in email only delivers to your project's team members. For real suppliers, add your own SMTP under **Authentication > SMTP Settings**.
+3. In Supabase, **Authentication > URL Configuration**: set Site URL to your deployed URL and add `https://<your-app>/**` and `http://localhost:3000/**` as redirect URLs. The default email contains a sign-in link that lands on `/auth/callback`.
+4. Supabase's built-in email only delivers to your project's team members, and its templates can't be edited. For real suppliers, add your own SMTP under **Authentication > Emails > SMTP Settings**; then you can also add `{{ .Token }}` to the Magic Link and Confirm signup templates to send 6-digit codes, which the sign-in page also accepts.
 
 ## Deploy (Vercel)
 

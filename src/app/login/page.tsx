@@ -16,6 +16,9 @@ export default function LoginPage() {
   const [demoOn, setDemoOn] = useState(false);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error") === "link")
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the URL
+      setError("That sign-in link didn't work. It may have expired, or been opened in a different browser. Request a new one.");
     fetch("/api/me")
       .then((r) => r.json())
       .then((d) => {
@@ -72,7 +75,7 @@ export default function LoginPage() {
               <span className="font-medium">Work email</span>
               <input className={input} type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </label>
-            <button className={button} disabled={busy}>Email me a code</button>
+            <button className={button} disabled={busy}>Email me a sign-in link</button>
           </form>
         ) : (
           <form
@@ -84,7 +87,7 @@ export default function LoginPage() {
           >
             <p className="text-sm text-slate-600">{note}</p>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Code</span>
+              <span className="font-medium">Code (only if your email shows one)</span>
               <input className={input} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} required />
             </label>
             <div className="flex gap-2">
