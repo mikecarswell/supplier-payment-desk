@@ -11,20 +11,23 @@ Built with Next.js, TypeScript and the Claude API (`claude-opus-5-5`, manual too
 - **Missing invoices:** confirms it isn't on file, opens a ticket, gives resubmission instructions.
 - **Bank detail changes:** never changes anything in chat. Opens a case for a Treasury callback to the phone number already on file.
 - **Escalations:** disputes, legal threats, suspected fraud or impersonation, policy exceptions.
+- **Company and supplier policies:** answers "what's your policy on…" questions by searching Meridian's AP policies plus the supplier's own agreement, and cites the section (e.g. AP-04.2, SA-1004.2).
 
 ## How it stays safe
 
 Policy is enforced in two layers, so a clever prompt can't talk the agent out of it:
 
 1. **Identity from the channel, not the chat.** The sender email comes from the portal login / email header. Typing "I'm the CFO of Northwind" changes nothing.
-2. **Guards in the tool layer** (`src/lib/agent/tools.ts`): unverified senders get no account data, suppliers only see their own records, bank numbers are masked to the last 4, internal notes and fraud flags never leave the tool layer, and bank changes for flagged suppliers are forced to a specialist without revealing why.
-3. **Policy prompt** (`src/lib/agent/prompts.ts`) covering the judgment calls code can't: when to escalate, not conceding disputes, not inventing payment dates.
+2. **Supplier-specific policies:** each supplier sees the general policies and only its own agreement; internal sections (approval limits, fraud criteria) are never returned to suppliers, in the tool layer or the database.
+3. **Guards in the tool layer** (`src/lib/agent/tools.ts`): unverified senders get no account data, suppliers only see their own records, bank numbers are masked to the last 4, internal notes and fraud flags never leave the tool layer, and bank changes for flagged suppliers are forced to a specialist without revealing why.
+4. **Policy prompt** (`src/lib/agent/prompts.ts`) covering the judgment calls code can't: when to escalate, not conceding disputes, not inventing payment dates.
 
 ## Project layout
 
 ```
 src/lib/agent/data.ts      Mock AP database (5 suppliers, 6 POs, 9 invoices, 2 payments)
 src/lib/agent/tools.ts     Tool definitions + guarded implementations
+src/lib/agent/policies.ts  AP policy library (8 general, 5 supplier agreements) + search
 src/lib/agent/prompts.ts   v1 (baseline) and v2 (policy) system prompts
 src/lib/agent/agent.ts     Tool-use loop, configs v1 / v2-prompt-only / v2
 src/app/api/chat/route.ts  Chat API

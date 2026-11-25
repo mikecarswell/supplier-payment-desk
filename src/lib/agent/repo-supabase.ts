@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Invoice, Payment, PurchaseOrder } from "./data";
 import type { ApRepo, CaseRecord } from "./repo";
+import type { PolicySection } from "./policies";
 
 // Live data access. Two clients:
 // - `user`: acts as the signed-in supplier, so row level security only returns their company's rows
@@ -119,6 +120,32 @@ export class SupabaseRepo implements ApRepo {
     });
     if (error) console.error("Failed to record case", c.id, error.message);
   }
+
+  async listPolicies(supplierId: string | null, all: boolean) {
+    if (all) {
+      const { data } = await this.service.from("policies").select("*").order("id");
+      return (data ?? []).map(toPolicy);
+    }
+    // Read as the signed-in user: the database itself hides internal sections and
+    // other suppliers' agreements. The filter below is a second check in code.
+    const { data } = await this.user.from("policies").select("*").order("id");
+    return (data ?? [])
+      .map(toPolicy)
+      .filter((p) => p.audience === "supplier" && (p.supplierId === null || p.supplierId === supplierId));
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw database row
+function toPolicy(r: any): PolicySection {
+  return {
+    id: r.id,
+    policyId: r.policy_id,
+    policyTitle: r.policy_title,
+    heading: r.heading,
+    body: r.body,
+    audience: r.audience,
+    supplierId: r.company_id,
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw database row

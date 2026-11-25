@@ -4,6 +4,7 @@
 // Policy checks stay in tools.ts. A null companyId means "no company filter",
 // which only the v1 baseline (guards off) ever asks for.
 import { invoices, payments, purchaseOrders, suppliers, type Invoice, type Payment, type PurchaseOrder } from "./data";
+import { POLICIES, visiblePolicies, type PolicySection } from "./policies";
 
 export interface SupplierIdentity {
   id: string;
@@ -45,6 +46,9 @@ export interface ApRepo {
   getProfile(companyId: string): Promise<SupplierProfile | null>;
   getPrivate(companyId: string): Promise<SupplierPrivate | null>;
   recordCase(c: CaseRecord): Promise<void>;
+  // all=false: general supplier-facing policies plus this supplier's agreement only.
+  // all=true: every section, including internal ones and other suppliers' (v1 baseline only).
+  listPolicies(supplierId: string | null, all: boolean): Promise<PolicySection[]>;
 }
 
 export class MemoryRepo implements ApRepo {
@@ -95,5 +99,9 @@ export class MemoryRepo implements ApRepo {
 
   async recordCase() {
     // Cases are returned to the caller as actions; nothing to persist in memory.
+  }
+
+  async listPolicies(supplierId: string | null, all: boolean) {
+    return all ? POLICIES : visiblePolicies(POLICIES, supplierId);
   }
 }

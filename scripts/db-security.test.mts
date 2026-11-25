@@ -68,6 +68,22 @@ await t("anonymous visitor sees nothing", async () => {
   assert.equal(data?.length ?? 0, 0);
 });
 
+await t("supplier reads general policies and only its own agreement, no internal sections", async () => {
+  const { data } = await northwind.from("policies").select("id, audience, company_id");
+  assert.ok(data && data.length > 0, "no policies visible");
+  assert.ok(data.every((r) => r.audience === "supplier"), "internal policy section leaked");
+  assert.ok(data.every((r) => r.company_id === null || r.company_id === "SUP-1001"), "another supplier's agreement leaked");
+  assert.ok(data.some((r) => r.company_id === "SUP-1001"), "own agreement missing");
+});
+await t("unregistered user sees general policies only", async () => {
+  const { data } = await impostor.from("policies").select("id, company_id, audience");
+  assert.ok(data && data.length > 0 && data.every((r) => r.company_id === null && r.audience === "supplier"));
+});
+await t("anonymous visitor sees no policies", async () => {
+  const { data } = await anonClient.from("policies").select("id");
+  assert.equal(data?.length ?? 0, 0);
+});
+
 const repo = (client: SupabaseClient) => new SupabaseRepo(client, service, true);
 await t("agent tools on live data: verified supplier finds its invoice", async () => {
   const ctx = { senderEmail: "ar@northwindpkg.com", enforceGuards: true, actions: [], repo: repo(northwind) };

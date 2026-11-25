@@ -4,6 +4,7 @@ import "../evals/env";
 import fs from "node:fs";
 import pg from "pg";
 import { invoices, payments, purchaseOrders, suppliers } from "../src/lib/agent/data";
+import { POLICIES } from "../src/lib/agent/policies";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is not set. Add it to .env.local (Supabase > Project Settings > Database > Connection string > URI).");
@@ -73,9 +74,16 @@ try {
     );
   }
 
+  for (const s of POLICIES) {
+    await client.query(
+      "insert into policies (id, policy_id, policy_title, heading, body, audience, company_id) values ($1,$2,$3,$4,$5,$6,$7)",
+      [s.id, s.policyId, s.policyTitle, s.heading, s.body, s.audience, s.supplierId],
+    );
+  }
+
   await client.query("commit");
   const counts = await client.query(
-    "select (select count(*) from companies) companies, (select count(*) from company_users) users, (select count(*) from invoices) invoices, (select count(*) from payments) payments",
+    "select (select count(*) from companies) companies, (select count(*) from company_users) users, (select count(*) from invoices) invoices, (select count(*) from payments) payments, (select count(*) from policies) policy_sections",
   );
   console.log("Database ready:", counts.rows[0]);
 } catch (err) {

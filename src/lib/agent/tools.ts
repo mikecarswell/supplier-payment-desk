@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { INVOICE_INBOX, TODAY, type Invoice } from "./data";
 import type { ApRepo } from "./repo";
+import { searchPolicies } from "./policies";
 
 // Context the server supplies for each conversation. The sender email comes
 // from the channel (the signed-in session, or an inbound email header), never
@@ -107,6 +108,18 @@ export const toolDefinitions: Anthropic.Beta.BetaTool[] = [
       type: "object",
       properties: { reason: str("Why the supplier wants to change bank details") },
       required: ["reason"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "lookup_policy",
+    description:
+      "Search Meridian's AP policies and the requester's own supplier agreement. Use it when a supplier asks about rules, requirements, terms or timelines, or before explaining why something is held, deducted or refused. Returns the matching sections with their IDs to cite.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: { query: str("What the supplier wants to know, in a few words, e.g. 'price tolerance' or 'bank change timeline'") },
+      required: ["query"],
       additionalProperties: false,
     },
   },
@@ -289,6 +302,28 @@ export async function executeTool(name: string, input: Record<string, string>, c
         status: "pending_callback_verification",
         next_step:
           "Treasury will call the supplier on the phone number already on file within 1 business day. No change is made until that call is complete. Never accept bank details in chat.",
+      };
+    }
+
+    case "lookup_policy": {
+      // Guard: general supplier-facing policies plus the requester's own agreement only.
+      // Unverified requesters get general policies. The baseline searches everything.
+      const sections = await repo.listPolicies(me?.id ?? null, !g);
+      const hits = searchPolicies(sections, input.query ?? "", 3);
+      if (hits.length === 0)
+        return {
+          error: "no_matching_policy",
+          message: "No Meridian policy covers this. Say so plainly and do not invent a policy; offer to pass the question to an AP specialist.",
+        };
+      return {
+        policies: hits.map((s) => ({
+          section_id: s.id,
+          policy: `${s.policyId} ${s.policyTitle}`,
+          heading: s.heading,
+          applies_to: s.supplierId ? "this supplier's agreement only" : "all suppliers",
+          text: s.body,
+          ...(g ? {} : { audience: s.audience, supplier_id: s.supplierId }),
+        })),
       };
     }
 
